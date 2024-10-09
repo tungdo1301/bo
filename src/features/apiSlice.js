@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import {createSlice} from '@reduxjs/toolkit';
 import axios from 'axios';
 
 export const apiSlice = createSlice({
@@ -6,12 +6,15 @@ export const apiSlice = createSlice({
     initialState: {
         data: undefined,
         loading: false,
+        loadingBet: false,
         error: null,
         count: {},
+        dataResult: undefined,
     },
     reducers: {
         fetchStart: (state) => {
             state.loading = true;
+            state.error = null;
         },
         fetchSuccess: (state, action) => {
             const data = action?.payload ?? null;
@@ -40,7 +43,7 @@ export const apiSlice = createSlice({
                 return count = {
                     buy: buyCount,
                     sell: sellCount,
-                    neutralCount:neutralCount,
+                    neutralCount: neutralCount,
                 };
             };
             countBuySell(data)
@@ -52,10 +55,64 @@ export const apiSlice = createSlice({
             state.loading = false;
             state.error = action.payload;
         },
+        fetchOpenBet: (state) => {
+            state.loadingBet = true;
+            state.error = null;
+        },
+        fetchBetClose: (state) => {
+            const betNumber = localStorage.getItem('countBet');
+            localStorage.setItem('countBet', `${+betNumber + 1}`)
+            state.loadingBet = false;
+        },
+        fetchBetError: (state, action) => {
+            state.loadingBet = false;
+            state.error = action.payload;
+        },
+        fetchResultOke: (state, action) => {
+            const oldResult = JSON.parse(localStorage.getItem('result'));
+            const oldWinResult = localStorage.getItem('winResult');
+            const oldWinStreak = localStorage.getItem('winStreak');
+            const oldLoseStreak = localStorage.getItem('loseStreak');
+            const newResult = action.payload;
+            if (oldResult?.transactionId !== newResult?.transactionId) {
+                if (newResult?.result == "WIN") {
+                    console.log(2);
+                    localStorage.setItem('winResult', `${+oldWinResult + 1}`)
+                    if (+oldWinStreak) {
+                        localStorage.setItem('winStreak', `${+oldWinStreak + 1}`)
+                    }else {
+                        localStorage.setItem('winStreak', `1`)
+                        localStorage.setItem('loseStreak', "0")
+                    }
+                }
+                if (+oldLoseStreak && newResult?.result == "LOSE") {
+                    console.log(3);
+                    localStorage.setItem('loseStreak', `${+oldLoseStreak + 1}`)
+                    localStorage.setItem('winStreak', "0")
+                }else if (newResult?.result == "LOSE") {
+                    localStorage.setItem('loseStreak', `1`)
+                    localStorage.setItem('winStreak', "0")
+                }
+            }
+            localStorage.setItem('result', JSON.stringify(newResult))
+            state.error = null;
+        },
+        fetchResultFail: (state, action) => {
+            state.error = action.payload;
+        },
     },
 });
 
-export const { fetchStart, fetchSuccess, fetchFailure } = apiSlice.actions;
+export const {
+    fetchResultOke,
+    fetchResultFail,
+    fetchOpenBet,
+    fetchBetClose,
+    fetchBetError,
+    fetchStart,
+    fetchSuccess,
+    fetchFailure
+} = apiSlice.actions;
 
 // Thunk action for making API call with token
 export const fetchApiData = () => async (dispatch) => {
@@ -75,28 +132,23 @@ export const fetchApiData = () => async (dispatch) => {
     }
 };
 
-export const buyApi = () => async (dispatch) => {
-    dispatch(fetchStart());
-    const token = localStorage.getItem('token');
+export const fetchResult = (type) => async (dispatch) => {
+
     // Lấy token từ localStorage (hoặc có thể từ Redux state nếu bạn quản lý token bằng Redux)
-    const bet = localStorage.getItem('bet'); // Hoặc bạn có thể lấy từ Redux state nếu token lưu ở đó
+    const token = localStorage.getItem('token'); // Hoặc bạn có thể lấy từ Redux state nếu token lưu ở đó
     try {
-        const response = await axios.post('https://goldence.net/api/wallet/binaryoption/bet', {
+        const response = await axios.get(`https://goldence.net/api/wallet/binaryoption/transaction/close?page=1&size=1&betAccountType=${type}`, {
             headers: {
-                Authorization: `Bearer ${token}`, // Thêm token vào header
+                Authorization: `Bearer ${token}`,  // Thêm token vào header
             },
-            body: {
-                "amt": bet,
-                "type": "UP",
-                "acc_type": "DEMO",
-            }
         });
-        console.log(response);
+        dispatch(fetchResultOke(response?.data?.d?.c[0]));
     } catch (error) {
-        console.log(error);
+        dispatch(fetchResultFail(error.message));
     }
 };
-export const placeBet = (bet,type) => async (dispatch) => {
+export const placeBet = (bet, type) => async (dispatch) => {
+    dispatch(fetchOpenBet());
     const url = 'https://goldence.net/api/wallet/binaryoption/bet';
     const token = localStorage.getItem('token'); // Thay YOUR_ACCESS_TOKEN bằng token của bạn nếu cần
     const val = localStorage.getItem('bet');
@@ -113,10 +165,15 @@ export const placeBet = (bet,type) => async (dispatch) => {
                 'Content-Type': 'application/json',
             }
         });
-        console.log(response);
+        if (response.data.ok) {
+            dispatch(fetchBetClose());
+        }else {
+            dispatch(fetchBetError(response.data.m));
+        }
         // Gọi thành công
     } catch (error) {
         console.log(error);
+        dispatch(fetchBetError(error.message));
     }
 };
 

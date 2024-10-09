@@ -5,6 +5,7 @@ import App from './App';
 import { store } from './store';
 import { Provider } from 'react-redux';
 import 'antd/dist/reset.css'; // Import CSS từ Ant Design
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 
 ReactDOM.render(
