@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {useSelector, useDispatch} from 'react-redux';
 import {increment, decrement} from './features/counterSlice';
-import {buyApi, fetchApiData, fetchResult, move, placeBet} from "./features/apiSlice";
+import {buyApi, fetchApiData, fetchResult, move, placeBet, spotBalance} from "./features/apiSlice";
 import {Button, Input, Typography, Space, Card, Row, Col} from "antd";
 import {Statistic} from 'antd';
 
@@ -38,7 +38,7 @@ function App() {
             setCountdownValue(prev => {
                 if (prev <= 1) {
                     dispatch(fetchResult(typeBet))
-                    // Khi đếm ngược hoàn thành, khởi động lại
+                    dispatch(spotBalance())
                     setKey(prevKey => prevKey + 1); // Thay đổi khóa để khởi động lại đồng hồ
                     dispatch(fetchApiData())
                     return initialCountdownValue; // Đặt lại về giá trị ban đầu
@@ -63,6 +63,11 @@ function App() {
         localStorage.getItem('loseStreak')]);
 
     useEffect(() => {
+        const balance = JSON.parse(localStorage.getItem('spotBalance'))
+        const isSL = localStorage.getItem('SL') >= (typeBet === "DEMO" ? 100000 : balance?.availableBalance )
+
+        if (+localStorage.getItem('SL') && isSL) return
+
         if (autoBet) {
             if (revert) {
                 if (countData?.buy >= 8 && countData?.buy > countData?.sell) {
@@ -85,7 +90,18 @@ function App() {
             }
         }
     }, [countData?.buy, countData?.sell, countData?.neutralCount]);
-
+    useEffect(() => {
+        const val = (+localStorage.getItem('winResult')) - (+localStorage.getItem('loseResult'))
+        if (val && val > localStorage.getItem('winMax')) {
+            localStorage.setItem('winMax', `${val}`)
+        } else if (val < localStorage.getItem('loseMax')) {
+            localStorage.setItem('loseMax', `${val}`)
+        }
+    }, [
+        localStorage.getItem('winResult'),
+        localStorage.getItem('loseResult'),
+        betCount
+    ]);
 
     return (
         <div className="App">
@@ -103,6 +119,12 @@ function App() {
                             localStorage.setItem('bet', e.target.value)
                         }}/>
                     </Space.Compact>
+                    <Space.Compact style={{width: '80%', top: '20px'}} className='mt-3'>
+                        <div style={{width: '10%'}}>SL</div>
+                        <Input onChange={(e) => {
+                            localStorage.setItem('SL', e.target.value)
+                        }}/>
+                    </Space.Compact>
                 </Card> : null
             }
 
@@ -113,12 +135,12 @@ function App() {
             }}>{localStorage.getItem('openInput') === "true" ? "ẩn" : "hiện"}
             </button>
             <Row>
-                <Col span={8}>
+                <Col span={12}>
                     <Card>
                         <div style={{background: '#fff', padding: 24, minHeight: 100, textAlign: 'center'}}>
                             <Title level={2}>
-                                <div>Số lệnh đánh {betNumber}</div>
-                                <div>Số lệnh win {oldWinResult}</div>
+                                <div>đánh {betNumber}</div>
+                                <div>win {localStorage.getItem('winResult')} === lose {localStorage.getItem('loseResult')}</div>
                                 <div>Số oldWinStreak {oldWinStreak}</div>
                                 <div>Số oldLoseStreak {oldLoseStreak}</div>
                             </Title>
@@ -128,6 +150,7 @@ function App() {
                                     localStorage.setItem('winResult', "0")
                                     localStorage.setItem('winStreak', "0")
                                     localStorage.setItem('loseStreak', "0")
+                                    localStorage.setItem('loseResult', `0`)
                                 }}>Reset
                                 </button>
                             </Title>
@@ -150,13 +173,26 @@ function App() {
                                 }}>{revert === 1 ?
                                     'Dao nguoc' : 'danh theo'}</button>
                             </div>
-                        </div>
-                        <div style={{textAlign: 'center', marginTop: '20px'}}>
-                            <Statistic.Countdown
-                                title="Thời gian còn lại"
-                                value={Date.now() + countdownValue * 1000} // Thiết lập giá trị cho Countdown
-                                format="HH:mm:ss"
-                            />
+                            <div className='mt-3'>
+                                <Title level={2}>
+                                    <div>
+                                         Now {(+localStorage.getItem('winResult')) - (+localStorage.getItem('loseResult'))}
+                                    </div>
+                                    <div>
+                                        Win max {localStorage.getItem('winMax')}
+                                    </div>
+                                    <div>
+                                        Loss Max {localStorage.getItem('loseMax')}
+                                    </div>
+                                </Title>
+                                <button onClick={() => {
+                                    localStorage.setItem('winMax', `0`)
+                                    localStorage.setItem('loseMax', `0`)
+                                    localStorage.setItem('loseResult', `0`)
+                                }}
+                                >Reset</button>
+
+                            </div>
                         </div>
                     </Card>
                 </Col>
@@ -166,6 +202,7 @@ function App() {
                             <p style={{color: 'red'}}>Error: {error}</p>
                             <button onClick={() => {
                                 dispatch(fetchApiData())
+                                dispatch(spotBalance())
                                 dispatch(fetchResult(typeBet))
                             }}>Refresh Data
                             </button>
@@ -173,6 +210,7 @@ function App() {
                             {/*<pre>{JSON.stringify(data, null, 2)}</pre>*/}
                             <button onClick={() => {
                                 dispatch(fetchApiData())
+                                dispatch(spotBalance())
                                 dispatch(fetchResult(typeBet))
                             }}>Refresh Data
                             </button>
@@ -183,14 +221,25 @@ function App() {
                         <Title level={2}>neutralCount: {countData?.neutralCount}</Title>
                     </Card>
                     <Card className='ms-3 mt-1'>
-                        <h1>Số Tiền: {localStorage.getItem('bet')} $</h1>
-                        {
-                            loadingBet ? <div>loading....</div> :
-                                <Title level={2} className=''>
-                                    <Button type="primary" className='m-3' onClick={() => dispatch(placeBet('UP', 'DEMO'))}>BUY</Button>
-                                    <Button color="danger" variant="solid" onClick={() => dispatch(placeBet('DOWN', 'DEMO'))}>SELL</Button>
-                                </Title>
-                        }
+                        <div style={{textAlign: 'center', marginTop: '2px'}}>
+                            <Statistic.Countdown
+                                title="Thời gian còn lại"
+                                value={Date.now() + countdownValue * 1000} // Thiết lập giá trị cho Countdown
+                                format="HH:mm:ss"
+                            />
+                            <h1>Số Tiền: {localStorage.getItem('bet')} $</h1>
+                            {localStorage.getItem('SL') && <h1>SL: {localStorage.getItem('SL')} $</h1>}
+
+                            {
+                                loadingBet ? <div>loading....</div> :
+                                    <Title level={2} className=''>
+                                        <Button type="primary" className='me-3'
+                                                onClick={() => dispatch(placeBet('UP', 'DEMO'))}>BUY</Button>
+                                        <Button color="danger" variant="solid"
+                                                onClick={() => dispatch(placeBet('DOWN', 'DEMO'))}>SELL</Button>
+                                    </Title>
+                            }
+                        </div>
                     </Card>
                 </Col>
             </Row>

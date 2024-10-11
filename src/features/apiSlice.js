@@ -71,12 +71,12 @@ export const apiSlice = createSlice({
         fetchResultOke: (state, action) => {
             const oldResult = JSON.parse(localStorage.getItem('result'));
             const oldWinResult = localStorage.getItem('winResult');
+            const oldLoseResult = localStorage.getItem('loseResult');
             const oldWinStreak = localStorage.getItem('winStreak');
             const oldLoseStreak = localStorage.getItem('loseStreak');
             const newResult = action.payload;
             if (oldResult?.transactionId !== newResult?.transactionId) {
-                if (newResult?.result == "WIN") {
-                    console.log(2);
+                if (newResult?.result === "WIN") {
                     localStorage.setItem('winResult', `${+oldWinResult + 1}`)
                     if (+oldWinStreak) {
                         localStorage.setItem('winStreak', `${+oldWinStreak + 1}`)
@@ -85,14 +85,16 @@ export const apiSlice = createSlice({
                         localStorage.setItem('loseStreak', "0")
                     }
                 }
-                if (+oldLoseStreak && newResult?.result == "LOSE") {
-                    console.log(3);
-                    localStorage.setItem('loseStreak', `${+oldLoseStreak + 1}`)
-                    localStorage.setItem('winStreak', "0")
-                }else if (newResult?.result == "LOSE") {
-                    localStorage.setItem('loseStreak', `1`)
-                    localStorage.setItem('winStreak', "0")
+                if (newResult?.result === "LOSE") {
+                    localStorage.setItem('loseResult', `${+oldLoseResult + 1}`)
+                    if (+oldLoseStreak) {
+                        localStorage.setItem('loseStreak', `${+oldLoseStreak + 1}`)
+                    }else if (newResult?.result === "LOSE") {
+                        localStorage.setItem('loseStreak', `1`)
+                        localStorage.setItem('winStreak', "0")
+                    }
                 }
+
             }
             localStorage.setItem('result', JSON.stringify(newResult))
             state.error = null;
@@ -173,6 +175,27 @@ export const placeBet = (bet, type) => async (dispatch) => {
         // Gọi thành công
     } catch (error) {
         console.log(error);
+        dispatch(fetchBetError(error.message));
+    }
+};
+
+export const spotBalance = () => async (dispatch) => {
+    const url = 'https://goldence.net/api/wallet/binaryoption/spot-balance';
+    const token = localStorage.getItem('token'); // Thay YOUR_ACCESS_TOKEN bằng token của bạn nếu cần
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            }
+        });
+        console.log(response.data);
+        if (response.data.ok) {
+          localStorage.setItem('spotBalance',JSON.stringify(response.data.d) )
+        }
+        // Gọi thành công
+    } catch (error) {
         dispatch(fetchBetError(error.message));
     }
 };
